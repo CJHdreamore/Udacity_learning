@@ -77,4 +77,21 @@ def avg_weekend_temperature(filename):
     mean_temp_weekends = pandasql.sqldf(q.lower(), locals())
     return mean_temp_weekends
 
-print avg_weekend_temperature('C:\Users\CJH\PycharmProjects\Udacity_DataScience\weather-underground.csv')
+
+def avg_min_temperature(filename):
+    '''
+    Find the average minimum temperature(mintempi column of the
+    weather dataframe) on rainy days where the minimum temperature
+    is greater than 55 degrees.
+
+    use cast(maxtempi as integer) to convert float to an integer.
+    '''
+    weather_data =pandas.read_csv(filename)
+    q = '''
+    SELECT avg(cast(mintempi as integer)) from weather_data where rain = 1 and mintempi > 55;
+
+    '''
+    avg_min_temp_rainy = pandasql.sqldf(q.lower(),locals())
+    return avg_min_temp_rainy
+
+print avg_min_temperature('C:\Users\CJH\PycharmProjects\Udacity_DataScience\weather-underground.csv')
