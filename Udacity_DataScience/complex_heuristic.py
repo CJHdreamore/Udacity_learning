@@ -1,6 +1,6 @@
 import numpy
 import pandas
-from pandas import DataFrame,Series
+from pandas import DataFrame,Se
 #import statsmodels.api as sm
 
 
