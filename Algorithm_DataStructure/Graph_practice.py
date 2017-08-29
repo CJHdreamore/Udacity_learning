@@ -53,19 +53,85 @@ class Graph(object):
         The indecies of the outer list represent "from" nodes.
         Each section in the list will stroe a list of tuples like
         (To Node,Edge Values)'''
-        adjacency_list = []
-        for node in self.nodes:
-            if node.edges:
-                for edge in node.edges:
-                    edge_list = []
-                    if edge.node_from == node:
-                        some = (edge.node_to.value, edge.value)
-                        edge_list.append(some)
+        #[None, [(2, 100), (3, 101), (4, 102)], None, [(4, 103)], None]
 
-                    else:
-                        edge_list = None
-                    adjacency_list.append(edge_list)
+        node_value = []
+        for node in self.nodes:
+            node_value.append(node.value)
+        max_node_value = max(node_value)       # the max id of node in graph
+        adjacency_list = [None] * (max_node_value + 1)   #initialize
+        nodes = [None] * (max_node_value + 1)
+        for node in self.nodes:
+            nodes[node.value] = node          # set up a list which the index is the id of the node,the value is the object ot the associated node
+        #print nodes
+
+        for node in nodes:
+            if node:
+                edge_list = []
+                for edge in node.edges:
+                    if edge.node_from == node:
+                        tuple = (edge.node_to.value,edge.value)
+                        edge_list.append(tuple)
+                if edge_list:
+                   adjacency_list[node.value] = edge_list
         return adjacency_list
+
+    def get_adjacency_matrix(self):
+        '''Return a 2D list,Row numbers represent from nodes,
+        column numbers represent to nodes.Store the edge values
+        in each spot,and a 0 if no edge exists'''
+
+        #looks like [[0,0,0,0,0],[0,0,100,101,102],[0,0,0,0,0],
+        #            [0,0,0,0,103],[0,0,0,0,0] ]
+
+        node_value = []
+        for node in self.nodes:
+            node_value.append(node.value)
+        max_node_value = max(node_value)  # the max id of node in graph
+        row_copy = [0] * (max_node_value+1)
+        matrix = []
+        for each_row in range(0,max_node_value + 1):
+            matrix.append(row_copy)
+        # finished initialization
+
+        for node in self.nodes:
+            row = [0] * (max_node_value + 1)
+            if node.edges:
+               for edge in node.edges:
+                   if edge.node_from == node and edge.node_to:
+
+                       row[edge.node_to.value] = edge.value
+                       matrix[node.value] = row
+                    # it's really troublesome for variables in python!!!!!
+
+        return matrix
+
+    # solution by Udacity
+    def get_adj_list(self):
+        max_index = self.find_max_index()
+        adjacency_list = [None] * (max_index + 1)
+        for edge in self.edges:
+            if adjacency_list[edge.node_from.value]:
+                adjacency_list[edge.node_from.value].append((edge.node_to.value,edge.value))
+            else:
+                adjacency_list[edge.node_from.value] = [(edge.node_to.value,edge.value)]
+        return adjacency_list
+
+    def get_adj_matrix(self):
+        max_index = self.find_max_index()
+        adjacency_matrix = [[0 for i in range(max_index + 1)] for j in range(max_index + 1)]
+
+        for edge in self.edges:
+            adjacency_matrix[edge.node_from.value][edge.node_to.value] = edge.value
+        return adjacency_matrix
+
+    def find_max_index(self):
+        max_index = -1
+        if len(self.nodes):
+            for node in self.nodes:
+                if node.value > max_index:
+                    max_index = node.value
+        return max_index
 
 
 
@@ -81,4 +147,17 @@ graph.insert_edge(102, 1, 4)
 graph.insert_edge(103, 3, 4)
 
 #print graph.get_edge_list()
-print graph.get_adjacency_list()
+#print graph.get_adjacency_list()
+
+#print graph.get_adjacency_matrix()
+
+print graph.get_adj_list()
+print graph.get_adj_matrix()
+
+############## Inspiring!!!!!#######################
+# This practice gives me a big big big warning : in python, the same varible name will cause some unexpected
+# results. if you change a varible,then every place that varible exsists will change at the same time!!!
+# That's to say, we should really take care of the temporary viarble and global varible.
+# Sometimes, it's smarter to replace creating new variables by using some longer phrases,just as the official Udacity solution tells us.
+
+####################################################
