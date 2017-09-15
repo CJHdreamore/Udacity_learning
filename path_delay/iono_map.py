@@ -61,12 +61,10 @@ with open('CKMG0010.16I')as obs_file:
             map1_flag += 1
 
 
-
-
-
         row_number += 1
 print (create_maps[datetime.datetime(2016, 1, 1, 0, 0)])
 print (create_maps[datetime.datetime(2016, 1, 1, 12, 0)])
+print (create_maps[datetime.datetime(2016, 1, 2, 0, 0)][87.5][73])
 
 
 
