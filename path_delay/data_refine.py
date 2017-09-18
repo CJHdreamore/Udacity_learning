@@ -1,15 +1,16 @@
 import datetime,time
 import math
 import numpy as np
-import pylab as pl
+#import pylab as pl
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdate
-import matplotlib.ticker as mtick
+import os
+from PIL import Image
 
+### Define a class-----------------------------------------------------------------------------------------
 
 class ObsFile(object):
-
 
     def __init__(self,file):
         self.fh = file
@@ -24,7 +25,7 @@ class ObsFile(object):
                     number_maps = int(no_space)           # one parameter
             return number_maps
 
-
+##------------------------------------------------------------------------------
 
     def get_base_radius(self):
         with open(self.fh)as obs_file:
@@ -36,60 +37,66 @@ class ObsFile(object):
                     base_radius = float(no_space)
             return base_radius
 
+##---------------------------------------------------------------------------------
 
     def get_all_maps(self):
         with open(self.fh)as obs_file:
-            row_number = 0
+
             lines = obs_file.readlines()
-            create_maps = {}
-            count = 0
-            value = {}
-            map1_flag = 0
-            date_record = []
+            create_maps = {}                  #final format of this file
+            current_row = 0
+            date_record = []                  #store 25 dates
+            tec_matrix_sets = []              #store 25 matrices
+            initial_lat = 87.5
+
+            #-----read each line--------------------
             for line in lines:
-                fixed_lat_data = []
+                comment = line[60:].strip()           # judge via comment
 
-                comment = line[60:].strip()
                 if comment == 'EPOCH OF CURRENT MAP':
-
+                    count_lat = 0                     # initialize the number of recorded_lattitude
+                    value = {}
+                    current_lat = initial_lat
+                    #----------extract date from str-----------------
                     time_str = '-'.join(line[:60].split())
-                    date = time.strptime(time_str, '%Y-%m-%d-%H-%M-%S')  # third: record map epoch
-                    y, m, d, h = date[0:4]
-                    date = datetime.datetime(y, m, d, h)
+                    date = time.strptime(time_str, '%Y-%m-%d-%H-%M-%S')
+                    y, m, d, h, M ,s = date[0:6]
+                    date = datetime.datetime(y, m, d, h,M,s)
                     date_record.append(date)
-                    if map1_flag == 71:
-                        map1_date = date_record.pop(0)
-                        create_maps[map1_date] = value
-                        value = {}
 
-                    if count == 71:
-                        # print ('yes')
-                        create_maps[date] = value
-                        value = {}
-                        count = 0
-
-                    initial_lat = 87.5
-
-                if comment == 'LAT/LON1/LON2/DLON/H':
+                elif comment == 'LAT/LON1/LON2/DLON/H':
                     '''it's time to access TEC data,stick the next 5 lines together'''
 
-                    for next in range(1, 6):
-                        raw_data = lines[row_number + next].split()
+                    #print (current_lat)
+                    fixed_lat_data = []           # initilize a 1-D list to store tec along index [73 longitudes]
+                    count_lat += 1
+
+                    #----------extract next 5 rows-----------
+                    for i in range(1, 6):
+                        raw_data = lines[current_row + i].split()
                         for ele in raw_data:
                             fixed_lat_data.append(float(ele))
 
-                    value[initial_lat] = fixed_lat_data
+                    #----------------------------------------
 
-                    # print (value)
-                    initial_lat -= 2.5
-                    count += 1
-                    map1_flag += 1
+                    value[current_lat] = fixed_lat_data       #store longitude-tec list into a dictionary with key=latitude
 
-                row_number += 1
+                    if count_lat == 71 :                      # 71 lattitudes refer to one tec_matrix
+                        tec_matrix_sets.append(value)
+                        #count_lat = 0
+                       # value = {}
 
-        return create_maps
+                    current_lat -= 2.5
+
+                current_row += 1                              # count row number of the whole file
 
 
+            #---------after juding all lines in this file--------------------
+            for i in range (0,25):
+                create_maps[date_record[i]] = tec_matrix_sets[i]
+            return create_maps
+
+##----------------------------------------------------------------------------------------------------
     def look_up_map(self,time,lat,log):
         these_maps = self.get_all_maps()
         if time in these_maps:
@@ -107,7 +114,7 @@ class ObsFile(object):
         else:
             return None
 
-
+##----------------------------------------------------------------------------------------------
     def get_tec_along_time(self,lat,log):
         time= []
         tec = []
@@ -128,11 +135,12 @@ class ObsFile(object):
 
         return (tec,time)
 
-
-    def draw_time_map(self,lat,log):
+##-----------------------------------------------------------------------------------------------------
+    def draw_time_map(self,date,lat,lon):
         latt = lat
-        logg = log
-        tec,time = self.get_tec_along_time(latt,logg)
+        long = lon
+        tec,time = self.get_tec_along_time(latt,long)
+
 
         # Draw Graph Settings
         mpl.rcParams['axes.unicode_minus'] = False # to show 'minus' correctly
@@ -140,22 +148,23 @@ class ObsFile(object):
         mpl.rc('ytick', labelsize=10)
         font_size = 20
         plt.style.use('ggplot')
-
         Fig = plt.figure(figsize=(10,5))
         ax = Fig.add_subplot(111)
         ax.xaxis.set_major_formatter(mdate.DateFormatter('%Y-%m-%d %H:%M:%S'))
         plt.ylim(0,max(tec)+10)
         plt.xlabel('Observe_time')
         plt.ylabel('TEC(0.1TECU)')
-        title = 'TEC during one day at '+ 'lattitude:' + str(latt)+' longitude:'+ str(log)
+        title = 'TEC during one day at '+ 'lattitude:' + str(latt)+' longitude:'+ str(long)
         plt.title(title)
 
-
+        #----draw now-------------------------
         ax.plot(time, tec, '--b*')
-        filename = 'TEC at ' + str(latt) + str(log)
+        filename = 'TEC' + '-'+ str(latt) + '-'+ str(long) + '-'+date
         plt.savefig(filename)
-        plt.show()
+       # plt.show()
 
+
+##-------------------------------------------------------------------------------------------------------
     def get_tec_with_position(self,time):
         lats = []
         lons = []
@@ -172,33 +181,7 @@ class ObsFile(object):
                         tec.append(this_map[keys][index])
         return lats,lons,tec
 
-
-
-    def draw_position_map(self,time):
-        lats,lons,tec = self.get_tec_with_position(time)
-        # set up map projection
-        # use low resolution coastlines
-        map = Basemap(projection = 'ortho',lat_0 = 35,lon_0 = 120,resolution = '1')
-
-        # draw lat/lon grid lines scales
-        map.drawmeridians(np.arange(-180,180,5))
-        map.drawparallels(np.arange(-87.5,87.5,2.5))
-
-        #compute native map projection coordinates of lat/lon grid
-        x,y = map(lons,lats)
-
-        max_tec = max(tec)
-
-        #set some parameters about the graph
-        y_offset    =15.0
-        rotation    =30
-        for i,j,k in zip(x,y,tec):
-            cs = map.scatter(i,j,tec,marker = 'o',color = '#FF5600')
-            plt.text(i,j+y_offset,rotation = rotation,fontdict=10)
-
-        plt.title('Global Tec at'+ str(time))
-        plt.show()
-
+##--------------------------------------------------------------------------------------------------------
 
     def exact_path_delay(self,time,lat,lon,inc,f):
         TECU = pow(10, 16)
@@ -211,17 +194,88 @@ class ObsFile(object):
 
         return point_iono_delay
 
+##----------------------------------------------------------------------------------------------------------
+
+    def draw_pd_withinday(self,date,lat,lon,inc,f):
+        obj_day = datetime.datetime.strptime(date, '%Y-%m-%d')
+        current_time = obj_day
+        time_record  = []
+        delay_record = []
+
+        for i in range (0,25):
+            current_delay = self.exact_path_delay(current_time,lat,lon,inc,f)
+            time_record.append(current_time)
+            delay_record.append(current_delay)
+            current_time += datetime.timedelta(seconds=3600)
+
+        # --------draw settings--------------
+        mpl.rcParams['axes.unicode_minus'] = False  # to show 'minus' correctly
+        mpl.rc('xtick', labelsize=5)
+        mpl.rc('ytick', labelsize=10)
+
+        plt.style.use('ggplot')
+        Fig = plt.figure(figsize=(10, 5))
+        ax = Fig.add_subplot(111)
+        ax.xaxis.set_major_formatter(mdate.DateFormatter('%Y-%m-%d %H:%M:%S'))
+        plt.ylim(0, max(delay_record) + 0.02)
+        plt.xlabel('Observe_time')
+        plt.ylabel('Path Delay(m)')
+        title = 'Path Delay within one day at ' + 'lattitude:' + str(lat) + ' longitude:' + str(lon)
+        plt.title(title)
+        # --------draw now-------------------------
+        ax.plot(time_record, delay_record, '--r*')
+        filename = 'PD' +'-'+ str(lat) +'-'+ str(lon) + '-' + date
+        plt.savefig(filename)
+        #plt.show()
+####----------------------------------------end class-------------------------------------------------------
+
+
+def search_file(date):
+
+    dir_path = os.getcwd()
+    files = os.listdir(dir_path)
+    for file in files:
+        if file[1:] == date:
+            return (file)
+##----------------------------------------------------------------------------------------------------------
+
+def search_figure(arg,lat,lon,date):
+    figure_name = arg + '-'+ str(lat) +'-'+ str(lon)+'-'+ date + '.png'
+    current_path = os.getcwd()
+    file_names = os.listdir(current_path)
+    figure_path = os.path.join(current_path,figure_name)
+    if figure_name in file_names:
+        img = Image.open(figure_path)
+        plt.figure(figure_name)
+        plt.imshow(img)
+        plt.axis('off')
+        plt.show()
+    else:
+        return None
+
+
+
 
 
 
 if __name__ == '__main__':
-    file = 'CKMG0010.16I'
-    obj = ObsFile(file)
-    #print(obj.look_up_map(datetime.datetime(2016,1,1,19),0,90))
-    #obj.draw_time_map(0,90)
-    #obj.get_tec_with_position(datetime.datetime(2016,1,1,20))
-    delay = obj.exact_path_delay(datetime.datetime(2016,1,1,18,0),0,90,10,13.58 * pow(10,9))
-    print (delay)
+    date = '2017-03-21'
+    obj_file = search_file(date)
+    obj = ObsFile(obj_file)
+    inc = 8.0
+    f   = 13.58 * pow(10,9)
+    obj_day = datetime.datetime.strptime(date, '%Y-%m-%d')
+    spec_time = obj_day + datetime.timedelta(hours=7)
+    #delay = obj.exact_path_delay(spec_time, 0, 95, inc, f)
+    # print (delay)
+    #obj.draw_time_map(date,0, 95)
+    #obj.draw_pd_withinday(date, 0, 100, inc, f)
+    search_figure('PD',0,100,date)
+
+
+
+
+
 
 
 
