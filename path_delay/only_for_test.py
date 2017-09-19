@@ -1,23 +1,16 @@
-from data_refine import *
-from remodify_filename import modify_name
-import os
-def search_file(date):
+import datetime
+start_date = datetime.datetime(1980,1,6,0,0,0)
+current_date = start_date + datetime.timedelta(hours= (1616 * 168 + 5 * 24))
+another_date = current_date + datetime.timedelta(days = 230)
+print (current_date)
+#print (another_date)
 
-    dir_path = os.getcwd()
-    files = os.listdir(dir_path)
-    for file in files:
-        if file[1:] == date:
-            return (file)
+print ( 23* 3600)
 
-date = '2017-03-21'
-obj_file = search_file(date)
-obj = ObsFile(obj_file)
-
-inc = 8.0
-f   = 13.58 * pow(10,9)
-obj_day = datetime.datetime.strptime(date,'%Y-%m-%d')
-spec_time = obj_day + datetime.timedelta(hours = 7)
-delay = obj.exact_path_delay(spec_time,0,95,inc,f)
-#print (delay)
-obj.draw_time_map(0,95)
-obj.draw_pd_withinday(obj_day,0,100,inc,f)
+days = datetime.datetime(2017,3,16) - datetime.datetime(1980,1,6)
+#print (days)
+hours = 13584 * 24
+day_of_week = hours % 168 / 24
+gps_week = (hours - day_of_week * 24)/ 168
+print (gps_week)
+print (day_of_week)
