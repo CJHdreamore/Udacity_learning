@@ -10,22 +10,24 @@ from PIL import Image
 
 class Tropofile(object):
 
-    def __init__(self,dir_path):
-        self.dir = dir_path
+    def __init__(self,dir_path,date):
+        self.date = date
+        self.tfile = 'T'+date
+
         self.files = os.listdir(dir_path)
 
 
-    def search_file(self,date):
-        for file in self.files:
-            if file == date:
-                return file
-        return None
+    #def search_file(self,file_name):
+    #    for file in self.files:
+    #        if file == file_name:
+    #            return file
+    #    return None
 
 
-    def get_all_site_ZPD(self,date):
-        file = self.search_file(date)
-        if file:
-            with open(file)as obs_file:
+    def get_all_site_ZPD(self):
+
+        if self.tfile in self.files:
+            with open(self.tfile)as obs_file:
                 lines = obs_file.readlines()
                 row_number = 0
                 for line in lines:
@@ -64,26 +66,27 @@ class Tropofile(object):
         else:
             return None
 
+#------------------------------------------------------------------------
+    def look_up_site_zpd(self,site_name):
+        ZPD_dic = self.get_all_site_ZPD()
 
-    def look_up_site(self,date,site):
-        ZPD_dic = self.get_all_site_ZPD(date)
-        if site in ZPD_dic.keys():
+        if site_name in ZPD_dic.keys():
             zpd_value = []
-            zpd_data = ZPD_dic.get(site)
+            zpd_data = ZPD_dic.get(site_name)
             for i in zpd_data:
                 zpd_value.append(i[0])
             #print (zpd_value)
+
             return zpd_value
 
-    def draw_zpd(self,date,site):
-        file_name = 'T'+ date
-        zpd_value = self.look_up_site(file_name,site)
+#------------------------------------------------------------------------------
+    def draw_site_zpd(self,site_name):
+        zpd_site = self.look_up_site_zpd(site_name)
         time_axis = []
-        time = datetime.datetime.strptime(date+ ' 01:00:00','%Y-%m-%d %H:%M:%S')
+        time = datetime.datetime.strptime(self.date+ ' 01:00:00','%Y-%m-%d %H:%M:%S')
         for i in range (0,12):
             time_axis.append(time)
             time = time + datetime.timedelta(hours = 2)
-
 
         # Draw Graph Settings
         mpl.rcParams['axes.unicode_minus'] = False  # to show 'minus' correctly
@@ -97,23 +100,24 @@ class Tropofile(object):
         #plt.ylim(0, max(tec) + 10)
         plt.xlabel('Observe_time')
         plt.ylabel('ZPD(mm)')
-        title = 'Tropospheric Zenith Path Delay at ' + site + ' during '+ date
+        title = 'Tropospheric Zenith Path Delay at ' + site_name + ' during '+ self.date
         plt.title(title)
 
         # ----draw now-------------------------
-        ax.plot(time_axis, zpd_value, '--b*')
-        filename = 'ZPD' + '-' + site + '-' + date
+        ax.plot(time_axis, zpd_site, '--b*')
+        filename = 'ZPD' + '-' + site_name + '-' + self.date
         #print (filename)
         plt.savefig(filename)
         plt.show()
 
-
-    def look_up_site(self,site_name,file_name):
+#------------------------------this function may be not necessary------------------------------------------
+    def get_sat_dic(self,file_name):
         file = self.search_file(file_name)
         if file:
             with open(file)as obs_file:
                 lines = obs_file.readlines()
                 row_number = 0
+                cordinate_dic = {}
                 for line in lines:
                     line = line.rstrip()
                     row_number += 1
@@ -125,24 +129,92 @@ class Tropofile(object):
                             site_info = lines[index]
                             name = site_info[1:5]
                             x = float(site_info[15:28].lstrip())
+                            #print (x)
+                            y = float(site_info[29:41])
+                            #print (y)
+                            z = float(site_info[42:54])
+                            cordinate_dic[name] = [x,y,z]
 
                             index = index + 1
+                return cordinate_dic
+#----------------------------------------------------------------------------------------------------------
+    def get_sites_alt(self,station_file):
+
+        if station_file in self.files:
+
+            with open(station_file) as obj_file:
+                lines = obj_file.readlines()
+                row_number = 0
+                for line in lines:
+                    row_number += 1
+                    line = line.rstrip()
+                    if line == '+SITE/ID':
+                        sites_alt = {}
+                        start_row = row_number + 2
+                        index = start_row - 1
+                        while (lines[index].rstrip() != '-SITE/ID'):
+                            station_info = lines[index]
+                            name = station_info[1:5]
+
+                            altitude = float(station_info[-7:-1])
+                            sites_alt[name] = altitude
+                            index += 1
+                        return sites_alt
+
+#----------------------------------------------------------------------------------------------------------
+
+    def look_up_site_alt(self,site_name,station_file):
+        sites_alt = self.get_sites_alt(station_file)
+
+        if site_name in sites_alt.keys():
+
+            site_alt = sites_alt.get(site_name)
+            return site_alt
+        else:
+            return None
+#----------------------------------------------------------------------------------------------------------
+
+    def TD_model_1(self,site_name,h_scene,inc,station_file):
+        zpd_scene =[]
+        h_site = self.look_up_site_alt(site_name,station_file)
+        zpd_site = self.look_up_site_zpd(site_name)
+        h0 = 6000
+        for i in zpd_site:
+            zpd_scene.append( i / math.cos(inc) * math.exp(-(h_scene - h_site)/h0))
+
+        return (zpd_scene)
+#----------------------------------------------------------------------------------------------------------
+    def draw_TD(self,site_name,h_scene,inc,station_file):
+        zpd_scene = self.TD_model_1(site_name,h_scene,inc,station_file)
+        time_axis = []
+        time = datetime.datetime.strptime(self.date + ' 01:00:00', '%Y-%m-%d %H:%M:%S')
+        for i in range(0, 12):   #risk ,what if  not 12??
+            time_axis.append(time)
+            time = time + datetime.timedelta(hours=2)
 
 
+        # Draw Graph Settings
+        mpl.rcParams['axes.unicode_minus'] = False  # to show 'minus' correctly
+        mpl.rc('xtick', labelsize=5)
+        mpl.rc('ytick', labelsize=10)
+        plt.style.use('ggplot')
+        Fig = plt.figure(figsize=(10, 5))
+        ax = Fig.add_subplot(111)
+        ax.xaxis.set_major_formatter(mdate.DateFormatter('%Y-%m-%d %H:%M:%S'))
+        # plt.ylim(0, max(tec) + 10)
+        plt.xlabel('Observe_time')
+        plt.ylabel('Slant Tropo Delay(mm)')
+        title = 'Tropospheric Slant Path Delay at '+ str(h_scene) + 'm during '+ self.date
+        plt.title(title)
+
+        # ----draw now-------------------------
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+        ax.plot(time_axis, zpd_scene, '--b*')
+        filename = 'TD' + '-' + str(h_scene) + '-' + self.date
+        # print (filename)
+        plt.savefig(filename)
+        plt.show()
 
 
 
@@ -154,12 +226,21 @@ class Tropofile(object):
 
 if __name__ == '__main__':
     dir_path = r'C:\Users\CJH\PycharmProjects\path_delay'
-    date = 'T2017-03-16'
-    obj = Tropofile(dir_path)
-    #ZPD = obj.get_all_site_ZPD(date)
-    #print (file_name)
-    #zpd_value = obj.look_up_site('T2017-03-16','BJCO')
-    #obj.draw_zpd('2017-03-16','BJCO')
-    obj.look_up_site('BJCO','T2017-03-16')
+    date = '2009-04-08'
+    obj = Tropofile(dir_path,date)
+    site_name = 'PDEL'
+    zpd_dic = obj.get_all_site_ZPD()
+    site_zpd = obj.look_up_site_zpd(site_name)
+    station_file = 'Site2009-04-05--04-11'
+    site_alt = obj.look_up_site_alt(site_name,station_file)
+    #obj.draw_site_zpd(site_name)
+    inc = (41 /180) * math.pi
+    h_scene = 644
+
+    obj.draw_TD(site_name,h_scene,inc,station_file)
+
+
+
+
 
 

@@ -65,6 +65,18 @@ def modify_name(dir_path):
             if not os.path.exists(dir_path + '/' + new_name):
                 os.rename(dir_path + '/' + old_name,dir_path + '/' + new_name)
 
+        elif old_name[-3:] == 'SNX':  # this file contains information about the latitude and cordinates of stations
+            gps_week = int(old_name[3:7])
+            day_of_week = 0
+            start_date = datetime.datetime(1980, 1, 6, 0, 0, 0)
+            delta_hours = gps_week * 168 + day_of_week * 24
+            from_date = start_date + datetime.timedelta(hours=delta_hours)
+            to_date = from_date + datetime.timedelta(days = 6)
+            print (to_date)
+            new_name = 'Site' + from_date.strftime('%Y-%m-%d') + '--'+to_date.strftime('%m-%d')
+            if not os.path.exists(dir_path + '/' + new_name):
+                os.rename(dir_path + '/' + old_name, dir_path + '/' + new_name)
+
 
 
 rootdir = r'C:\Users\CJH\PycharmProjects\path_delay'

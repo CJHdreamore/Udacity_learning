@@ -93,10 +93,12 @@ class Graph(object):
         Store the edge values in each spot and a 0 if no edge'''
         max_index = self.find_max_index()
         adjacency_matrix =[ [0] *(max_index) for _ in range (max_index)]
+        adjacency_matrix_edge = [[0] * (max_index) for _ in range(max_index)]
         for edge in self.edges:
             from_index,to_index = edge.node_from.value,edge.node_to.value
             adjacency_matrix[from_index][to_index] =edge.value
-        return adjacency_matrix
+            adjacency_matrix_edge[from_index][to_index] = edge
+        return adjacency_matrix,adjacency_matrix_edge
 
     def find_max_index(self):
         '''Return the highest found node number
@@ -119,12 +121,74 @@ class Graph(object):
         for node in self.nodes:
             node.visited = False
 
+    def dfs_helper(self,start_node,ret_list):
+        '''Arguement: start_node is the starting node
+        Modifies: the value of the visited property of nodes in self.nodes
+        Return: a list of traversed node values(integer'''
+        ret_list = ret_list
+        parent_stack = []
+        adj_matrix_obj = self.get_adjacency_matix()[1]
+        start_node.visited = True
+        for edge_obj in adj_matrix_obj[start_node.value]:
+            if edge_obj != 0 and (edge_obj.node_to.visited == False):
+                #print edge_obj.node_to.value
+                next_node = edge_obj.node_to
+                #edge_obj.node_to.visited = True
+                parent_stack.append(edge_obj.node_from)
+                ret_list.append(edge_obj.node_to.value)
+                self.dfs_helper(next_node,ret_list)
+            else:
+                continue
+        # walk this,no unvisited node linked with edges
+        if parent_stack:
+            next_node = parent_stack.pop()
+            return self.dfs_helper(next_node,ret_list)
+        else:
+            return ret_list
 
 
+    def dfs_names(self,start_node_num):
+        return [self.node_names[num] for num in self.dfs(start_node_num)]
 
 
+    def dfs(self,start_node_num):
+        '''Outputs a list of numbers corresponding to
+        the traversed nodes in a DFS
+        Arguments: start_node_num is the starting node number ( integer)
+        Modifies: the value of the visited property of nodes in self.nodes
+        Return : a list of the node values ( integer)'''
+        self._clear_visited()
+        start_node = self.find_node(start_node_num)
+        ret_list = [start_node.value]
+        return self.dfs_helper(start_node,ret_list)
 
+    def bfs(self,start_node_num):
+        '''Using iterative implementation of BFS,iterating through a node's edges
+        Arguments : start_node_num is the node number ( integer)
+        Modifies: the value of the visited property of nodes in self.nodes
+        Return: a list of the node values ( integers)'''
 
+        node =self.find_node(start_node_num)
+        self._clear_visited()
+        node.visited = True
+        adj_matrix_obj = self.get_adjacency_matix()[1]
+        queue = [node]  # this is a queue
+        ret_list = []
+        while(queue):
+            head = queue[0]
+            for edge in adj_matrix_obj[head.value]:
+                if edge != 0 and edge.node_to.visited == False:
+                    edge.node_to.visited = True
+                    queue.append(edge.node_to)  # next_node enter a queue
+            # No edge linked in current_node
+            dequeue = queue.pop(0)  # head out of the queue
+            ret_list.append(dequeue.value)
+
+        return ret_list
+
+    def bfs_names(self,start_node_num):
+
+        return [self.node_names[num] for num in self.bfs(start_node_num)]
 
 
 
@@ -179,15 +243,18 @@ graph.insert_edge(9471, 5, 2)   # Sao Paolo <-> London
 import pprint
 pp = pprint.PrettyPrinter(indent = 2)
 
-print 'Edge List'
-pp.pprint(graph.get_edge_list_names())
+#print 'Edge List'
+#pp.pprint(graph.get_edge_list_names())
 
-print '\nAdjacency List'
-pp.pprint(graph.get_adjacency_list_names())
+#print '\nAdjacency List'
+#pp.pprint(graph.get_adjacency_list_names())
 
-print "\nAdjacency Matrix"
-pp.pprint(graph.get_adjacency_matix())
+#print "\nAdjacency Matrix"
+#pp.pprint(graph.get_adjacency_matix())
 
-print"\nDepth First Search"
-pp.pprint(graph.dfs_names(2))
+#print"\nDepth First Search"
+#pp.pprint(graph.dfs_names(2))
 
+#print graph.dfs_names(2)
+
+print graph.bfs_names(2)
