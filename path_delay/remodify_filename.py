@@ -41,15 +41,15 @@ def modify_name(dir_path):
             ddd = int(old_name[4:7])
             yy = "20" + old_name[9:11]
             year = int(yy)
-            print(year)
+
             d1 = datetime.datetime(year, 1, 1)
-            print(d1)
+
             d2 = d1 + datetime.timedelta(days=ddd - 1)
-            print(d2)
+
             new_name = 'I' + d2.strftime("%Y-%m-%d")
-            print(new_name)
+
             if not os.path.exists(dir_path + '/' + new_name):
-                print("yes")
+
                 os.rename(dir_path + '/' + old_name, dir_path + '/' + new_name)
 
 
@@ -61,7 +61,7 @@ def modify_name(dir_path):
             delta_hours = gps_week * 168 + day_of_week * 24
             current_date = start_date + datetime.timedelta(hours = delta_hours)
             new_name = 'T' + current_date.strftime('%Y-%m-%d')
-            #print (new_name)
+
             if not os.path.exists(dir_path + '/' + new_name):
                 os.rename(dir_path + '/' + old_name,dir_path + '/' + new_name)
 
@@ -72,7 +72,7 @@ def modify_name(dir_path):
             delta_hours = gps_week * 168 + day_of_week * 24
             from_date = start_date + datetime.timedelta(hours=delta_hours)
             to_date = from_date + datetime.timedelta(days = 6)
-            print (to_date)
+
             new_name = 'Site' + from_date.strftime('%Y-%m-%d') + '--'+to_date.strftime('%m-%d')
             if not os.path.exists(dir_path + '/' + new_name):
                 os.rename(dir_path + '/' + old_name, dir_path + '/' + new_name)
