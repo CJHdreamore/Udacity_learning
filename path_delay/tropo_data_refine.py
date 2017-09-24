@@ -5,15 +5,18 @@ import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdate
+from matplotlib.ticker import MultipleLocator,FormatStrFormatter
 import os
 from PIL import Image
+
 
 class Tropofile(object):
 
 ##----------------------------------------------------------------------------------------------------------
 
-    def __init__(self,date,station_file,site_name,h_scene,inc):
-        self.site_name = site_name
+    def __init__(self,date,station_file,lat,lon,h_scene,inc):
+        self.lat = lat
+        self.lon = lon
         self.h_scene = h_scene
         self.inc = (inc / 180) * math.pi   # degree to rad
         self.date = date
@@ -84,9 +87,64 @@ class Tropofile(object):
                     site_alt = float(row[h_index])
                     sites_alt[site_name] = site_alt
                 return sites_alt
+
 ##----------------------------------------------------------------------------------------------------------
+    def get_sites_pos(self):
+        '''
+
+        :return: lat,lon of sites
+        '''
+        if self.sfile in self.files:
+            with open(self.sfile) as obj_file:
+                lines = obj_file.readlines()
+                row = 0
+                for line in lines:
+                    row += 1
+                    line = line.rstrip()
+                    if line == '+SITE/ID':
+                       # sites_pos = {}
+                        sites_name = []
+                        sites_lon = []
+                        sites_lat = []
+                        start_row = row  # don't skip header
+                    elif line == '-SITE/ID':
+                        end_row = row
+                sites_info = lines[start_row:end_row - 1]
+                header = sites_info[0].rstrip()
+                len_h = len(header)
+                i = 0
+                while (i < len_h - 10):
+                    h_pos = header[i:i+11]
+                    h_name = header[i:i+4]
+
+                    if h_pos == 'APPROX_LAT_':
+                        lat_index = i
+                    elif h_pos == 'APPROX_LON_':
+                        lon_index = i
+
+                    if h_name == 'CODE':
+                        name_index = i
+                    i += 1
+                for row in sites_info[1:]:
+                    row = row.rstrip()
+                    site_name = row[name_index:name_index+4]
+                    sites_name.append(site_name)
+
+                    site_lat = row[lat_index:lat_index+6]
+                    site_lat = '.'.join(site_lat.split())
+                    site_lat = float(site_lat)
+                    sites_lat.append(site_lat)
+
+                    site_lon = row[lon_index:lon_index+6]
+                    site_lon = '.'.join(site_lon.split())
+                    site_lon = float(site_lon)
+                    sites_lon.append(site_lon)
+
+                    #sites_pos[site_name] = [site_lat,site_lon]
 
 
+
+                return (sites_name,sites_lat,sites_lon)
 
 ##----------------------------------------------------------------------------------------------------------
 
@@ -134,35 +192,90 @@ class Tropofile(object):
                     std_value = float(row[std_index])
                     ZPD_value.setdefault(site_name,[]).append(tropo_value)
                     ZPD_std.setdefault(site_name,[]).append(std_value)
-
                 return ZPD_value,ZPD_std
 
         else:
             return None
 ##----------------------------------------------------------------------------------------------------------
+    def draw_sites_pos(self):
+        sites_name,sites_lat,sites_lon = self.get_sites_pos()
 
+        # Draw Graph Settings
+        mpl.rcParams['axes.unicode_minus'] = False  # to show 'minus' correctly
+        mpl.rc('xtick', labelsize=5)
+        mpl.rc('ytick', labelsize=5)
+        plt.style.use('ggplot')
+        Fig = plt.figure(figsize=(10, 5))
+        ax = Fig.add_subplot(111)
 
+        plt.xlim(-90.00,90.00,2.5)
+        plt.ylim(0.00,365.00,5.0)
+        xmajorlocator = MultipleLocator(10)
+        xmajorformatter = FormatStrFormatter('%1.1f')
+        xminorlocator = MultipleLocator(2.5)
 
+        ymajorlocator = MultipleLocator(10)
+        ymajorformatter = FormatStrFormatter('%1.1f')
+        yminorlocator = MultipleLocator(5.0)
 
+        ax.xaxis.set_major_locator(xmajorlocator)
+        ax.xaxis.set_major_formatter(xmajorformatter)
+
+        ax.yaxis.set_major_locator(ymajorlocator)
+        ax.yaxis.set_major_formatter(ymajorformatter)
+
+        ax.xaxis.set_minor_locator(xminorlocator)
+        ax.yaxis.set_minor_locator(yminorlocator)
+
+        ax.xaxis.grid(True,which = 'minor')
+        ax.yaxis.grid(True, which='major')
+
+        plt.xlabel('lattitude')
+        plt.ylabel('longitude')
+        title = 'IGS station distribution ' + ' on ' + self.date
+        plt.title(title)
+
+        # ----draw now-------------------------
+        #ax.plot(sites_lat, sites_lon, '--b*')
+        T = np.arctan2(sites_lat,sites_lon) # for color setting
+        plt.scatter(sites_lat,sites_lon,c = T,s=25,alpha=0.4,marker='o')  # c = color; s =size; alpha = transparency
+        plt.show()
+##----------------------------------------------------------------------------------------------------------
+    def find_nearest_sites(self):
+        sites_name,sites_lat,sites_lon = self.get_sites_pos()
+        pos_errors =[]
+        for i in range (len(sites_name)):
+            lat_error = abs(sites_lat[i] - self.lat)
+            lon_error = abs(sites_lon[i] - self.lon)
+            total_error = lat_error + lon_error / 2
+            pos_errors.append(total_error)
+
+        for i in range (len(pos_errors)):
+            if pos_errors[i] == min(pos_errors):
+                nearest_site = sites_name[i]
+
+        return (nearest_site)
 
 
 ##----------------------------------------------------------------------------------------------------------
-
     def look_up_site_zpd(self):
         '''
         :param site_name:
         :return: zpd of this site
         '''
+        site_name = self.find_nearest_sites()
+
         ZPD_value,ZPD_std = self.get_all_sites_ZPD()
 
-        if self.site_name in ZPD_value.keys():
-           zpd_one_site = ZPD_value.get(self.site_name)
+        if site_name in ZPD_value.keys():
+           zpd_one_site = ZPD_value.get(site_name)
 
         return zpd_one_site
 
 #------------------------------------------------------------------------------
-    def draw_site_zpd(self,site_name):
-        zpd_one_site = self.look_up_site_zpd(site_name)
+    def draw_site_zpd(self):
+        site_name = self.find_nearest_sites()
+        zpd_one_site = self.look_up_site_zpd()
         time_axis = []
         time = datetime.datetime.strptime(self.date+ ' 01:00:00','%Y-%m-%d %H:%M:%S')
         for i in range (0,12):
@@ -195,9 +308,10 @@ class Tropofile(object):
         '''
         :return: site_altitude
         '''
+        site_name = self.find_nearest_sites()
         sites_alt = self.get_sites_alt()
-        if self.site_name in sites_alt.keys():
-            site_alt = sites_alt.get(self.site_name)
+        if site_name in sites_alt.keys():
+            site_alt = sites_alt.get(site_name)
             return site_alt
         else:
             return None
@@ -208,7 +322,7 @@ class Tropofile(object):
         :return: TPD of h_scene at a fixed radar_inc during one day （slant range)
         '''
         zpd_scene_oneday =[]
-        h_site = self.look_up_site_alt()       #altitude of the IGS station
+        h_site = self.look_up_site_alt()        #altitude of the IGS station
         zpd_one_site = self.look_up_site_zpd()     #zpd of the IGS station
         h0 = 6000                              #atomospheric thickness constant
         for i in zpd_one_site:
@@ -249,13 +363,16 @@ class Tropofile(object):
 
 
 if __name__ == '__main__':
-    station_file = 'Site2009-08-02--08-08'
-    date = '2009-08-07'
-    site_name = 'PDEL'
-    inc = 41
-    h_scene = 644
-    obj = Tropofile(date,station_file,site_name,h_scene,inc)
+    station_file = 'Site2008-04-27--05-03'
+    date = '2008-04-28'
+    lat = 46.43
+    lon = 8.11
+    inc = 31.2
+    h_scene = 2163
+    obj = Tropofile(date,station_file,lat,lon,h_scene,inc)
     obj.draw_TD()
+    td = obj.draw_TD()
+
 
 
 
