@@ -370,7 +370,6 @@ if __name__ == '__main__':
     inc = 31.2
     h_scene = 2163
     obj = Tropofile(date,station_file,lat,lon,h_scene,inc)
-    obj.draw_TD()
     td = obj.draw_TD()
 
 

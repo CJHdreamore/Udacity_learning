@@ -2,11 +2,15 @@ import datetime,time
 import math
 import numpy as np
 #import pylab as pl
+
 import matplotlib as mpl
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdate
 import os
 from PIL import Image
+from scipy import interpolate
 
 ### Define a class-----------------------------------------------------------------------------------------
 
@@ -14,7 +18,7 @@ class ObsFile(object):
 
 ##---------------------------------------------------------------------------------------------------------
 
-    def __init__(self,date,f,inc,lat,lon):
+    def __init__(self,date,time,f,inc,lat,lon):
         self.lat = lat
         self.lon = lon
         self.f = f
@@ -24,6 +28,7 @@ class ObsFile(object):
         self.fh = file_name
         current_path = os.getcwd()
         self.files = os.listdir(current_path)
+        self.time = datetime.datetime.strptime(self.date+':'+time,'%Y-%m-%d:%H:%M:%S')
 
 
 ##----------------------------------------------------------------------------------------------------------
@@ -163,6 +168,184 @@ class ObsFile(object):
                             return tec_map
 
                     index += 1
+##----------------------------------------------------------------------------------------------------------
+    def inter_latlon_vtec(self):
+        tec_maps = self.get_tec_maps()
+        latt = []
+        long = []
+        vtec = []
+
+        if self.time in tec_maps.keys():
+            tec_map = tec_maps[self.time]
+
+            for lat in tec_map:
+                latt.append(lat)
+                lons = tec_map[lat]
+                for i in range(len(lons)):
+                    vtec.append(lons[i])    #create lattitude axies & vtec list
+
+            for i in range (-180,185,5):
+                long.append(i)              #create longitude axies
+
+            fig = plt.figure(figsize = (9,6))
+            #ax = plt.subplot(1,1,1,projection = '3d')
+            ax = Axes3D(fig)
+            x,y= np.meshgrid(long,latt)
+            col = len(x[0])
+            row = len(x)
+            count = 0
+            one_row = []
+            v = []
+            for ele in vtec:
+                count += 1
+                one_row.append(ele)
+                if count == col:
+                    v.append(one_row)
+                    count = 0
+                    one_row = []
+            surf = ax.plot_surface(x,y,v,cmap=cm.coolwarm,linewidth=0.5, antialiased=True)
+            ax.set_xlabel('lon')
+            ax.set_ylabel('lat')
+            ax.set_zlabel('vtec')
+            plt.colorbar(surf, shrink=0.5, aspect=5)  # 标注
+
+
+            # 二维插值
+            newfunc = interpolate.interp2d(x, y, v, kind='linear')
+            solution = 180/1.5
+            latt_new = np.linspace(87.5,-87.5,solution)
+
+            lon_new = np.linspace(-180.0,180.0,solution)
+            v_insert = newfunc(lon_new,latt_new)
+            vnew = []
+            row_one = []
+            for i in range(len(v_insert)):
+                row = v_insert[i]
+                for k in range(len(row)):
+                    element = row[k]
+                    if element < 0:
+                        element = 0
+                    row_one.append(element)
+                vnew.append(row_one)
+                row_one = []
+
+            xnew,ynew = np.meshgrid(lon_new,latt_new)
+            fig = plt.figure(figsize=(9, 6))
+            ax2 = Axes3D(fig)
+            surf2 = ax2.plot_surface(xnew,ynew,vnew,rstride=2, cstride=2, cmap=cm.coolwarm,linewidth=0.5, antialiased=True)
+            ax2.set_xlabel('lon')
+            ax2.set_ylabel('lat')
+            ax2.set_zlabel('vtec')
+            plt.colorbar(surf2, shrink=0.5, aspect=5)  # 标注
+
+            plt.show()
+
+##---------------------------------------------------------------------------------------------------------
+    def bilinear_interpo(self):
+        '''
+        x,y:array_like 1-D arrays of coordinates in strictly ascending order
+        z: array_like 2-D array of data with shape(xsize,ysize)
+        :return:
+        '''
+        lon_solution = int(360/5)
+        lat_solution = int(87.5*2/2.5)
+        lon = np.linspace(-180.0,180.0,lon_solution+1)
+        lat = np.linspace(-87.5,87.5,lat_solution+1)
+        vtec = []
+        tec_maps = self.get_tec_maps()
+        if self.time in tec_maps.keys():
+            this_map = tec_maps[self.time]
+            for i in lat:
+                vtec.append(this_map[i])
+
+        vtec = np.array(vtec)
+
+        newfuc = interpolate.RectBivariateSpline(lat,lon,vtec)
+        nvtec = newfuc.ev(self.lat,self.lon)
+        return nvtec
+
+
+
+
+##----------------------------------------------------------------------------------------------------------
+
+    def interpolate_vtec(self):
+        tec_maps = self.get_tec_maps()
+        if self.time in tec_maps.keys():
+            tec_map = tec_maps[self.time]
+            vtec = []
+
+            for lat in tec_map:
+                lons = tec_map[lat]
+                for i in range(len(lons)):
+                    vtec.append(lons[i])  # create vtec list
+
+            lon_solution = 360 / 5.0
+
+            lat_solution = 87.5 * 2/2.5
+
+            lon = np.linspace(-180.0,180.0,int(lon_solution + 1))
+            lat = np.linspace(87.5,-87.5,int(lat_solution + 1))
+            long, latt = np.meshgrid(lon, lat)
+
+            col = len(long[0])
+            v = []
+            one_row = []
+            count = 0
+
+            for ele in vtec:
+                count += 1
+                one_row.append(ele)
+                if count == col:
+                    v.append(one_row)
+                    one_row = []
+                    count = 0
+
+            #interpolation:
+            kind_list = ['linear','quintic','cubic']
+
+            f = interpolate.interp2d(long,latt,v,kind = kind_list[1])
+            lon_new_sol = int(360 / 2.5)
+
+            lat_new_sol = int(87.5 * 2 / 1.5)
+
+            lon_new = np.linspace(-180.0,180.0,lon_new_sol+1)
+            lat_new = np.linspace(87.5,-87.5,lat_new_sol+1)
+
+
+            v_insert = f(lon_new,lat_new)
+            vnew = []
+            row_one = []
+            for i in range(len(v_insert)):
+                row = v_insert[i]
+                for k in range(len(row)):
+                    element = row[k]
+                    if element < 0:
+                        element = 0
+                    row_one.append(element)
+                vnew.append(row_one)
+                row_one = []
+            #lon_new, lat_new = np.meshgrid(lon_new, lat_new)
+
+            return lon_new,lat_new, vnew
+
+##----------------------------------------------------------------------------------------------------------
+    def look_up_inter_vtec(self):
+
+        lon,lat,vtec = self.interpolate_vtec()
+        lon_error_store = []
+        lat_error_store = []
+        for i in range(len(lon)):
+            lon_error = abs(lon[i] - self.lon)
+            lon_error_store.append(lon_error)
+        for k in range(len(lat)):
+            lat_error = abs(lat[k] - self.lat)
+            lat_error_store.append(lat_error)
+        lon_index = lon_error_store.index(min(lon_error_store))
+        lat_index = lat_error_store.index(min(lat_error_store))
+        inter_vtec = vtec[lon_index][lat_index]
+        return (inter_vtec)
+
 
 ##----------------------------------------------------------------------------------------------------------
 
@@ -210,8 +393,11 @@ class ObsFile(object):
                     obs_time.append(keys)
 
         return (tec,obs_time)
+##----------------------------------------------------------------------------------------------------------
 
-##---------------------------------------------------------------------------------------------------------
+
+
+##----------------------------------------------------------------------------------------------------------
 
     def draw_tec_during_oneday(self):
         '''
@@ -313,6 +499,9 @@ class ObsFile(object):
 
 ##----------------------------------------------------------------------------------------------------------
 
+
+##----------------------------------------------------------------------------------------------------------
+
     def draw_pd_during_oneday(self):
         '''
         :param lat:
@@ -364,15 +553,24 @@ def search_figure(arg):
 
 
 if __name__ == '__main__':
-    date = '2009-07-16'
+    date = '2009-04-08'
+    time = '08:00:00'
     f    = 9.6 * pow(10,9)   #X
     inc  = 41
-    lat = 37.5
-    lon = -25
-    obj = ObsFile(date,f,inc,lat,lon)
+    lat  = 37.76
+    lon  = -25.47
+    obj = ObsFile(date,time,f,inc,lat,lon)
+
+
     #obj.draw_pd_during_oneday()
-    figure = 'IPD-N37dot5-W25-2009-04-08'
-    search_figure(figure)
+    #vtec = obj.look_up_inter_vtec()
+    #ipd = obj.compute_iono(vtec)
+    #print (ipd)
+    #obj.inter_latlon_vtec()
+    vtec = obj.bilinear_interpo()
+    ipd = obj.compute_iono(vtec)
+    print (ipd)
+
 
 
 
