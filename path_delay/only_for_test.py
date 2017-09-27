@@ -12,19 +12,19 @@ current_date = datetime.datetime(2009,4,30,0,0,0)
 inter_days = current_date - start_date
 
 #real_days = inter_days + 1
-print (inter_days)
+#print (inter_days)
 
 
 
 
 #-----------for tropo file-------------------------------------------------------------------------------
-days = datetime.datetime(2008,4,28) - datetime.datetime(1980,1,6)
+days = datetime.datetime(2017,3,16) - datetime.datetime(1980,1,6)
 #print (days)
-hours = 10340 * 24
+hours = 13584 * 24
 day_of_week = hours % 168 / 24
 gps_week = (hours - day_of_week * 24)/ 168
-#print (gps_week)
-#print (day_of_week)
+print (gps_week)
+print (day_of_week)
 
 ##-----------------Model-TPD-2--------------------------------------------------------------------------
 h_scene = 644

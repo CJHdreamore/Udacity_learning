@@ -8,13 +8,13 @@ import matplotlib.dates as mdate
 from matplotlib.ticker import MultipleLocator,FormatStrFormatter
 import os
 from PIL import Image
-
+from scipy import interpolate
 
 class Tropofile(object):
 
 ##----------------------------------------------------------------------------------------------------------
 
-    def __init__(self,date,station_file,lat,lon,h_scene,inc):
+    def __init__(self,date,time,station_file,lat,lon,h_scene,inc):
         self.lat = lat
         self.lon = lon
         self.h_scene = h_scene
@@ -24,12 +24,13 @@ class Tropofile(object):
         self.sfile = station_file
         current_path = os.getcwd()
         self.files = os.listdir(current_path)
+        self.time = datetime.datetime.strptime(self.date + ':' + time, '%Y-%m-%d:%H:%M:%S')
 
 ##----------------------------------------------------------------------------------------------------------
     def get_sites(self):
         '''
-
-        :return: all_used sites in this Tropo-data file
+        all_used sites in today's Tropo delay data
+        :return: site_list = [site_name]
         '''
         if self.tfile in self.files:
             with open(self.tfile) as obj_file:
@@ -55,7 +56,7 @@ class Tropofile(object):
     def get_sites_alt(self):
         '''
 
-        :return: a dictionary: key = site_name; value:site_altitude
+        :return: {site_name:site_altitude}
         '''
         if self.sfile in self.files:
             with open(self.sfile) as obj_file:
@@ -92,7 +93,7 @@ class Tropofile(object):
     def get_sites_pos(self):
         '''
 
-        :return: lat,lon of sites
+        :return: site_name=[],site_lat=[],site_lon=[]
         '''
         if self.sfile in self.files:
             with open(self.sfile) as obj_file:
@@ -152,8 +153,7 @@ class Tropofile(object):
         '''
 
         :return:  ZPD_value: 'key' = site_name, value = {'specific_time':zpd_value}
-                  or value = [ zpd_value],index of the list maps the obs_time
-                  ZPD_std: 'key' = site_name, value = std
+
         '''
         if self.tfile in self.files:
             with open(self.tfile)as obs_file:
@@ -192,7 +192,7 @@ class Tropofile(object):
                     std_value = float(row[std_index])
                     ZPD_value.setdefault(site_name,[]).append(tropo_value)
                     ZPD_std.setdefault(site_name,[]).append(std_value)
-                return ZPD_value,ZPD_std
+                return ZPD_value
 
         else:
             return None
@@ -255,22 +255,88 @@ class Tropofile(object):
                 nearest_site = sites_name[i]
 
         return (nearest_site)
+##----------------------------------------------------------------------------------------------------------
+    def elim_abnormal_site(self):
+        '''
+        find abnormally working sites: their observing time is less than usual one
+        :return: abnormal_sites = [site_name]
+        '''
+        site_list = self.get_sites()
+        elim_sites = []
+        ZPD_value= self.get_all_sites_ZPD()   # a ZPD dic
+        for each_site in site_list:
+            if each_site in ZPD_value.keys():
+                zpd_one_site = ZPD_value.get(each_site)
+                if len(zpd_one_site)!= 12:
+                    ZPD_value.pop(each_site)
+                    elim_sites.append(each_site)
+                    print (each_site + ' broke down')
 
+        update_ZPD_value = ZPD_value
+        return update_ZPD_value,elim_sites
 
 ##----------------------------------------------------------------------------------------------------------
-    def look_up_site_zpd(self):
+    def find_nearest_4_sites(self):
+        sites_name, sites_lat, sites_lon = self.get_sites_pos()
+        ZPD_value, elim_sites = self.elim_abonormal_site()
+
+        for k in range(len(sites_name)):
+            if elim_sites:
+                if sites_name[k] in elim_sites:
+                    elim_sites.remove(sites_name[k])
+                    sites_name.pop(k)
+                    sites_lat.pop(k)
+                    sites_lon.pop(k)
+
+        dis_dic = {}
+        dis = []
+        nearest_sites = []
+        for i in range(len(sites_name)):
+
+            lat_error = abs(sites_lat[i] - self.lat)
+            lon_error = abs(sites_lon[i] - self.lon)
+            distance_sq = lat_error**2 + lon_error**2
+            dis_dic[sites_name[i]]= math.sqrt(distance_sq)
+            dis.append(math.sqrt(distance_sq))
+
+        while (dis_dic.keys()):
+            for site in dis_dic:
+                if dis_dic[site] == min(dis_dic.values()):
+                    nearest_sites.append(site)
+
+            if len(nearest_sites) == 4:
+                return nearest_sites
+            else:
+                for site in nearest_sites:
+                    if site in dis_dic:
+                        dis_dic.pop(site)
+
+##----------------------------------------------------------------------------------------------------------
+    def one_site_zpd_interp_fortime(self,site_name):
         '''
+
         :param site_name:
-        :return: zpd of this site
+        :return: IGS_zpd over a interp time
         '''
-        site_name = self.find_nearest_sites()
+        time_line = np.linspace(1,23,12)
+        interp_time = self.time
+        sites_zpd,sites_std = self.get_all_sites_ZPD()
+        if site_name in sites_zpd:
+            site_zpd_oneday = sites_zpd.get(site_name)
 
-        ZPD_value,ZPD_std = self.get_all_sites_ZPD()
+        for index in range(len(time_line) - 1):
+            if interp_time > time_line[index] and interp_time < time_line[index + 1]:
+                time_before = (time_line[index])
+                time_after = (time_line[index+1])
+                time_before_index =int(time_before / 2 )
+                time_after_index = int(time_after /2 )
+                time_before_zpd = site_zpd_oneday[time_before_index]
+                time_after_zpd = site_zpd_oneday[time_after_index]
+                break
+        interp_zpd = (time_after - interp_time)/(time_after - time_before) *time_before_zpd +\
+                    (interp_time - time_before)/(time_after - time_before) * time_after_zpd
 
-        if site_name in ZPD_value.keys():
-           zpd_one_site = ZPD_value.get(site_name)
-
-        return zpd_one_site
+        return interp_zpd
 
 #------------------------------------------------------------------------------
     def draw_site_zpd(self):
@@ -304,17 +370,32 @@ class Tropofile(object):
 
 ##---------------------------------------------------------------------------------------------------------
 
-    def look_up_site_alt(self):
+    def look_up_site_alt(self,site_name):
         '''
+        :site_name : the name of a site
         :return: site_altitude
         '''
-        site_name = self.find_nearest_sites()
+
         sites_alt = self.get_sites_alt()
         if site_name in sites_alt.keys():
             site_alt = sites_alt.get(site_name)
             return site_alt
         else:
             return None
+
+##----------------------------------------------------------------------------------------------------------
+    def look_up_site_pos(self,site_name):
+        '''
+
+        :param site_name:
+        :return: the lat,lon of a site
+        '''
+        sites_name,sites_lat,sites_lon = self.get_sites_pos()
+        for k in range(len(sites_name)):
+            if site_name == sites_name[k]:
+                site_lat = sites_lat[k]
+                site_lon = sites_lon[k]
+        return site_lat,site_lon
 
 #----------------------------------------------------------------------------------------------------------
     def TD_model_1(self):
@@ -331,6 +412,188 @@ class Tropofile(object):
 
             zpd_scene_oneday.append(zpd_scene)
         return (zpd_scene_oneday)
+##----------------------------------------------------------------------------------------------------------
+    def TD_model_for_onesite(self,site_name):
+        h_one_site = self.look_up_site_alt(site_name)
+        zpd_one_site = self.one_site_zpd_interp_fortime(site_name)
+        h0 = 6000
+        zpd_scene = zpd_one_site / math.cos(self.inc) * math.exp(-(self.h_scene - h_one_site) / h0)
+        return zpd_scene
+##----------------------------------------------------------------------------------------------------------
+    def get_working_sites_info(self):
+        '''
+        from 'site' file to get pos info about today's existing sites
+        :return: {site_name:[lat,lon]}
+        '''
+        if self.sfile in self.files:
+            with open(self.sfile) as obj_file:
+                lines = obj_file.readlines()
+                row = 0
+                for line in lines:
+                    row += 1
+                    line = line.rstrip()
+                    if line == '+SITE/ID':
+                       # sites_pos = {}
+                        sites_pos = {}
+                        start_row = row  # don't skip header
+                    elif line == '-SITE/ID':
+                        end_row = row
+                sites_info = lines[start_row:end_row - 1]
+                header = sites_info[0].rstrip()
+                len_h = len(header)
+                i = 0
+                while (i < len_h - 10):
+                    h_pos = header[i:i+11]
+                    h_name = header[i:i+4]
+
+                    if h_pos == 'APPROX_LAT_':
+                        lat_index = i
+                    elif h_pos == 'APPROX_LON_':
+                        lon_index = i
+
+                    if h_name == 'CODE':
+                        name_index = i
+                    i += 1
+                for row in sites_info[1:]:
+                    row = row.rstrip()
+                    site_name = row[name_index:name_index+4]
+
+
+                    site_lat = row[lat_index:lat_index+6]
+                    site_lat = '.'.join(site_lat.split())
+                    site_lat = float(site_lat)
+
+
+                    site_lon = row[lon_index:lon_index+6]
+                    site_lon = '.'.join(site_lon.split())
+                    site_lon = float(site_lon)
+
+
+                    sites_pos[site_name] = [site_lat,site_lon]
+
+
+
+                return sites_pos
+##----------------------------------------------------------------------------------------------------------
+    def TPD_processing_1(self):
+
+        #step_1: According to self.date,get all working sites' Zenith Path delay
+
+        # today's working sites info
+        existing_sites_pos = self.get_working_sites_info()
+        print (existing_sites_pos)
+
+        existing_sites_zpd = self.get_all_sites_ZPD()   #{site_name:[zpd_value]}
+
+        #step_2: find abnormal working sites and remove it from working_sites_zpd
+        abn_sites = []
+        for site in existing_sites_zpd:
+            if len(existing_sites_zpd[site]) < 12:
+                print (site+' is abnormally working')
+                abn_sites.append(site)
+        for site in abn_sites:
+            if site in existing_sites_zpd:
+                existing_sites_zpd.pop(site)
+            if site in existing_sites_pos:
+                existing_sites_pos.pop(site)
+
+        working_sites_zpd = existing_sites_zpd
+        working_sites_pos = existing_sites_pos
+
+
+
+
+        #step3: find two normal working sites around target scene
+
+        pos_errors = {}
+        error_record = []
+        for site in working_sites_pos:
+            lat,lon = working_sites_pos[site][0],working_sites_pos[site][1]
+
+            lat_error = lat - self.lat
+            lon_error = lon - self.lon
+            pos_error = math.sqrt(lat_error**2 + lon_error**2)
+            pos_errors[site] = pos_error
+            error_record.append(pos_error)
+
+        nearest_site = []
+        for site in pos_errors:
+            if pos_errors[site] == min(error_record):
+                nearest_site.append(site)
+        if len(nearest_site) < 2:
+            error_record.remove(min(error_record))
+            for site in pos_errors:
+                if pos_errors[site] == min(error_record):
+                    nearest_site.append(site)
+        if len(nearest_site) >2:
+            nearest_site.pop()
+
+        first_site = nearest_site[0]
+        second_site = nearest_site[1]
+        first_site_pos_error = pos_errors[first_site]
+        second_site_pos_error = pos_errors[second_site]
+        w1 = first_site_pos_error/(first_site_pos_error+second_site_pos_error)
+        w2 = second_site_pos_error /(first_site_pos_error+second_site_pos_error)
+        first_site_zpd = np.array(working_sites_zpd[first_site])
+        second_site_zpd = np.array(working_sites_zpd[second_site])
+
+        # step 4 : link GPS data with the altitude of targeted scene &convert zpd to slant range path delay
+
+        h_first_site = self.look_up_site_alt(first_site)
+        h_second_site = self.look_up_site_alt(second_site)
+        h0 = 6000
+        first_tpd_scene = first_site_zpd / math.cos(self.inc) * math.exp(-(self.h_scene - h_first_site) / h0)
+        second_tpd_scene = second_site_zpd / math.cos(self.inc) * math.exp(-(self.h_scene - h_second_site) / h0)
+        first_tpd_scene = np.array(first_tpd_scene)
+        second_tpd_scene = np.array(second_tpd_scene)
+
+        interp_site_tpd = w1 *first_tpd_scene + w2 * second_tpd_scene  # array
+
+
+
+        #step_5: linear interpolating over obs_time
+
+        obs_time = datetime.datetime.strptime(self.date + ':01:00:00','%Y-%m-%d:%H:%M:%S')
+        obs_time_axis = []
+        for i in range(12):
+            obs_time_axis.append((obs_time))
+            obs_time = obs_time + datetime.timedelta(seconds=7200)
+
+        for i in range(len(obs_time_axis) - 1):
+
+            if self.time >= obs_time_axis[i] and self.time < obs_time_axis[i+1]:
+                time_before_index = i
+                time_after_index = i+1
+                time_before = obs_time_axis[i]
+                time_after = obs_time_axis[i+1]
+
+                time_before_tpd = interp_site_tpd[time_before_index]
+
+                time_after_tpd = interp_site_tpd[time_after_index]
+
+                coe1 = (time_after - self.time).seconds / (time_after - time_before).seconds
+
+                coe2 = (self.time - time_before).seconds / (time_after - time_before).seconds
+
+                interp_time_site_tpd = coe1 * time_before_tpd + coe2 * time_after_tpd
+                break
+
+        print (interp_time_site_tpd)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #----------------------------------------------------------------------------------------------------------
     def draw_TD(self):
@@ -363,15 +626,15 @@ class Tropofile(object):
 
 
 if __name__ == '__main__':
-    station_file = 'Site2008-04-27--05-03'
-    date = '2008-04-28'
-    lat = 46.43
-    lon = 8.11
-    inc = 31.2
-    h_scene = 2163
-    obj = Tropofile(date,station_file,lat,lon,h_scene,inc)
-    td = obj.draw_TD()
-
+    station_file = 'Site2009-04-05--04-11'
+    date = '2009-04-08'
+    time = '07:47:00'
+    lat = 37.76
+    lon = -25.47
+    inc = 41
+    h_scene = 847
+    obj = Tropofile(date,time,station_file,lat,lon,h_scene,inc)
+    obj.TPD_processing_1()
 
 
 

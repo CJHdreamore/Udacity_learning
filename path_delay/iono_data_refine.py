@@ -117,9 +117,10 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_tec_maps(self):
-        ''' convert all the tec values in this file into several maps (according to the obs_interval
-            data structure: tec_map = {'specific_time:{lattitude:[tec1,tec2,****};}
-                            [tec1,tec2,***]:index of this list maps to the longitude
+        '''  get global tec_maps of one day, the number of maps depends on observing interval
+             :return
+                     tec_map = {'specific_time:{lattitude:[tec1,tec2,****};}
+                    [tec1,tec2,***]:index of this list maps to the longitude
         '''
         if self.fh in self.files:
             with open(self.fh)as obs_file:
@@ -265,6 +266,7 @@ class ObsFile(object):
         return nvtec
 
 
+##----------------------------------------------------------------------------------------------------------
 
 
 ##----------------------------------------------------------------------------------------------------------
@@ -373,8 +375,6 @@ class ObsFile(object):
 
     def get_tec_during_oneday(self):
         '''
-        :param lat:  degreee
-        :param lon:  degree
         :return: tec,obs_time   tec_value during one day on (lat,lon)
         '''
         obs_time= []
@@ -498,6 +498,90 @@ class ObsFile(object):
         return pd
 
 ##----------------------------------------------------------------------------------------------------------
+    def processing_IPD_1(self):
+        '''
+
+        :return: interpolated global_slant_iono_pd at obs_time (interpolate over time)
+
+                {lat:array[slant_path_delay]}
+        '''
+        #step 1: get global tec_map associated with input date (self.date)
+        tec_maps_oneday = self.get_tec_maps()
+        #step 2: find time before & after the obs_time
+        obs_time_line = []
+        for key in tec_maps_oneday.keys():
+            obs_time_line.append(key)
+
+        for i in range(len(obs_time_line) - 1):
+            if obs_time_line[i] < self.time and obs_time_line[i+1] > self.time:
+                obs_time_before = obs_time_line[i]
+                obs_time_after = obs_time_line[i+1]
+
+        tec_map_before = tec_maps_oneday[obs_time_before]
+        tec_map_after = tec_maps_oneday[obs_time_after]
+
+        #step3 :linear interpolation for specific obs_time
+        interptime_pd_map = {}
+        lat = np.linspace(87.5,-87.5,71)
+        for i in lat:
+            tec_before = np.array(tec_map_before[i])
+            tec_after = np.array(tec_map_after[i])
+            time_interval = (obs_time_after - obs_time_before).seconds
+            interp_tec = (obs_time_after - self.time).seconds / time_interval * tec_before +\
+                         (self.time - obs_time_before).seconds /time_interval * tec_after
+            # vtec converts to iono slant path delay
+            TECU = pow(10, 16)
+            interptime_tec = interp_tec * 0.1 * TECU
+
+            K = 40.3
+            rad = math.pi * self.inc / 180
+
+            interptime_pd = K * interptime_tec / (pow(self.f, 2) * math.cos(rad))
+
+            interptime_pd_map[i] = interptime_pd
+
+        return (interptime_pd_map)
+
+
+##----------------------------------------------------------------------------------------------------------
+    def processing_IPD_2(self):
+        '''
+        According to (lat,lon) of  the target scene, impolying bilinear interpolation on retangular grids
+        :return: the desire ionon path delay for target scene on a specific observe_time
+        '''
+        interptime_pd_map = self.processing_IPD_1()
+        #step 1: According to self.lat & self.lon ,find four retangular coordinates around target scene
+        lat = np.linspace(87.5,-87.5,71)
+        lon = np.linspace(-180,180,73)
+        for i in range(lat.size - 1):
+            if lat[i] >= self.lat and lat[i+1] <= self.lat:
+                lat_larger = lat[i]
+                lat_smaller = lat[i+1]
+        lat_grid = [lat_smaller,lat_larger]
+        for i in range(lon.size - 1):
+            if lon[i] <= self.lon and lon[i + 1] <= self.lon:
+                lon_larger = lon[i+1]
+                lon_smaller = lon[i]
+        lon_grid = [lon_smaller,lon_larger]
+
+        lon_smaller_index = int((lon_smaller + 180) / 5)
+        lon_larger_index = int((lon_larger + 180) /5)
+
+        point_1 = interptime_pd_map[lat_smaller][lon_smaller_index]
+        point_2 = interptime_pd_map[lat_smaller][lon_larger_index]
+        point_3 = interptime_pd_map[lat_larger][lon_smaller_index]
+        point_4 = interptime_pd_map[lat_larger][lon_larger_index]
+
+        # compute interpolated value -- bilinear
+        pd_array =np.array([[point_1,point_2],[point_3,point_4]])
+        lat_array = np.array([lat_larger - self.lat,self.lat - lat_smaller])
+        lon_array = np.array([[lon_larger - self.lon],[self.lon - lon_smaller]])
+        coe = 1/((lat_larger - lat_smaller)*(lon_larger - lon_smaller))
+
+        result = np.dot(lat_array,pd_array)
+        result = coe * np.dot(result,lon_array)[0]
+
+        return (result)
 
 
 ##----------------------------------------------------------------------------------------------------------
@@ -550,26 +634,24 @@ def search_figure(arg):
        # plt.imshow(img)
        # plt.axis('off')
        # plt.show()
+##----------------------------------------------------------------------------------------------------------
 
 
 if __name__ == '__main__':
-    date = '2009-04-08'
-    time = '08:00:00'
-    f    = 9.6 * pow(10,9)   #X
-    inc  = 41
+    date = '2009-07-16'
+    time = '07:47:00'
+    f    = 9.6 * pow(10,9)   #Ku
+    #inc_near = 2.5
+    inc_far = 41
     lat  = 37.76
     lon  = -25.47
-    obj = ObsFile(date,time,f,inc,lat,lon)
-
-
-    #obj.draw_pd_during_oneday()
-    #vtec = obj.look_up_inter_vtec()
-    #ipd = obj.compute_iono(vtec)
-    #print (ipd)
-    #obj.inter_latlon_vtec()
-    vtec = obj.bilinear_interpo()
-    ipd = obj.compute_iono(vtec)
+    obj = ObsFile(date,time,f,inc_far,lat,lon)
+    ipd = obj.processing_IPD_2()
     print (ipd)
+
+
+
+
 
 
 
