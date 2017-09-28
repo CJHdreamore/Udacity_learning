@@ -1,8 +1,12 @@
+#coding = utf-8
 import datetime
 import math
 from matplotlib import pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from iono_data_refine import *
+from tropo_data_refine import *
+
 
 
 ##---------------------------------------------------------------------------------------------------------
@@ -33,5 +37,7 @@ ZPD = math.pow(h_scene,2) / (8.55 * pow(10,7)) - h_scene/3411 + 2.41
 TPD = ZPD/math.cos(inc)
 #print (TPD)
 
-##--------------------------------------------------------------------------------------------------------
+
+
+
 

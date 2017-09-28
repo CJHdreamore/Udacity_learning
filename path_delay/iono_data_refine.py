@@ -1,3 +1,4 @@
+#coding = utf-8
 import datetime,time
 import math
 import numpy as np
@@ -12,9 +13,12 @@ import os
 from PIL import Image
 from scipy import interpolate
 
+''' A file named 'Iyyyy-mm-dd' contains global vtec maps during one day at different observing time
+    The number of maps in this file depends on the interval obsering time : 2h or 1h etc
+'''
 ### Define a class-----------------------------------------------------------------------------------------
 
-class ObsFile(object):
+class IonoFile(object):
 
 ##---------------------------------------------------------------------------------------------------------
 
@@ -34,7 +38,10 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_map_numbers (self):
-        ''' how many maps in this file'''
+        '''
+        the number of maps in 'Ixxxx-xx-xx' iono vtec file
+        :return:  type - int
+        '''
         if self.fh in self.files:
             with open(self.fh)as obs_file:
                 lines = obs_file.readlines()
@@ -49,7 +56,11 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_interval(self):
-        '''find out the time spacing of this file,ie : 7200s = 2 h'''
+        '''
+        find out the observing time interval
+
+        :return: interval, unit:  (s)
+        '''
         if self.fh in self.files:
             with open(self.fh)as obs_file:
                 lines = obs_file.readlines()
@@ -63,7 +74,11 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_obs_time(self):
-        '''return the obs_time_axis: a list of specific time on the day we need'''
+        '''
+        the observing time axis during one day
+        :return: obs_time_axis=[datetime.datetime()]
+                  type : list; element_type : datetime.datetime
+        '''
         interval = self.get_interval()
         number = self.get_map_numbers()
         obs_time = datetime.datetime.strptime(self.date, '%Y-%m-%d')
@@ -76,7 +91,12 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_lat_lon_info(self):
-        ''' In this file : the lat's and lon's coverage and their spacing '''
+        '''
+        the lat & lon range that each global vtec map covers
+
+        :return:  1.lat_info = [start_lat,end_lat,inter_lat]
+                  2. lon_info = [start_lon,end_lon,inter_lon]
+        '''
         if self.fh in self.files:
             with open(self.fh)as obs_file:
                 lines = obs_file.readlines()
@@ -93,7 +113,11 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_lon_occp_number(self):
-        ''' How many lines we should extract at one time as a list of TEC on a fixed lattitude '''
+        '''
+        In a vtec global map ( on a specific observing time), when the lat is fixed, how many lines can cover
+        the whole lons of this map
+        :return: the number of lines, type: int
+        '''
         if self.fh in self.files:
             with open(self.fh)as obs_file:
                 lines = obs_file.readlines()
@@ -117,9 +141,11 @@ class ObsFile(object):
 ##----------------------------------------------------------------------------------------------------------
 
     def get_tec_maps(self):
-        '''  get global tec_maps of one day, the number of maps depends on observing interval
-             :return
+        '''
+        get all global vtec_maps during one day.
+        :return:
                      tec_map = {'specific_time:{lattitude:[tec1,tec2,****};}
+
                     [tec1,tec2,***]:index of this list maps to the longitude
         '''
         if self.fh in self.files:
@@ -169,207 +195,8 @@ class ObsFile(object):
                             return tec_map
 
                     index += 1
-##----------------------------------------------------------------------------------------------------------
-    def inter_latlon_vtec(self):
-        tec_maps = self.get_tec_maps()
-        latt = []
-        long = []
-        vtec = []
-
-        if self.time in tec_maps.keys():
-            tec_map = tec_maps[self.time]
-
-            for lat in tec_map:
-                latt.append(lat)
-                lons = tec_map[lat]
-                for i in range(len(lons)):
-                    vtec.append(lons[i])    #create lattitude axies & vtec list
-
-            for i in range (-180,185,5):
-                long.append(i)              #create longitude axies
-
-            fig = plt.figure(figsize = (9,6))
-            #ax = plt.subplot(1,1,1,projection = '3d')
-            ax = Axes3D(fig)
-            x,y= np.meshgrid(long,latt)
-            col = len(x[0])
-            row = len(x)
-            count = 0
-            one_row = []
-            v = []
-            for ele in vtec:
-                count += 1
-                one_row.append(ele)
-                if count == col:
-                    v.append(one_row)
-                    count = 0
-                    one_row = []
-            surf = ax.plot_surface(x,y,v,cmap=cm.coolwarm,linewidth=0.5, antialiased=True)
-            ax.set_xlabel('lon')
-            ax.set_ylabel('lat')
-            ax.set_zlabel('vtec')
-            plt.colorbar(surf, shrink=0.5, aspect=5)  # 标注
-
-
-            # 二维插值
-            newfunc = interpolate.interp2d(x, y, v, kind='linear')
-            solution = 180/1.5
-            latt_new = np.linspace(87.5,-87.5,solution)
-
-            lon_new = np.linspace(-180.0,180.0,solution)
-            v_insert = newfunc(lon_new,latt_new)
-            vnew = []
-            row_one = []
-            for i in range(len(v_insert)):
-                row = v_insert[i]
-                for k in range(len(row)):
-                    element = row[k]
-                    if element < 0:
-                        element = 0
-                    row_one.append(element)
-                vnew.append(row_one)
-                row_one = []
-
-            xnew,ynew = np.meshgrid(lon_new,latt_new)
-            fig = plt.figure(figsize=(9, 6))
-            ax2 = Axes3D(fig)
-            surf2 = ax2.plot_surface(xnew,ynew,vnew,rstride=2, cstride=2, cmap=cm.coolwarm,linewidth=0.5, antialiased=True)
-            ax2.set_xlabel('lon')
-            ax2.set_ylabel('lat')
-            ax2.set_zlabel('vtec')
-            plt.colorbar(surf2, shrink=0.5, aspect=5)  # 标注
-
-            plt.show()
-
-##---------------------------------------------------------------------------------------------------------
-    def bilinear_interpo(self):
-        '''
-        x,y:array_like 1-D arrays of coordinates in strictly ascending order
-        z: array_like 2-D array of data with shape(xsize,ysize)
-        :return:
-        '''
-        lon_solution = int(360/5)
-        lat_solution = int(87.5*2/2.5)
-        lon = np.linspace(-180.0,180.0,lon_solution+1)
-        lat = np.linspace(-87.5,87.5,lat_solution+1)
-        vtec = []
-        tec_maps = self.get_tec_maps()
-        if self.time in tec_maps.keys():
-            this_map = tec_maps[self.time]
-            for i in lat:
-                vtec.append(this_map[i])
-
-        vtec = np.array(vtec)
-
-        newfuc = interpolate.RectBivariateSpline(lat,lon,vtec)
-        nvtec = newfuc.ev(self.lat,self.lon)
-        return nvtec
-
 
 ##----------------------------------------------------------------------------------------------------------
-
-
-##----------------------------------------------------------------------------------------------------------
-
-    def interpolate_vtec(self):
-        tec_maps = self.get_tec_maps()
-        if self.time in tec_maps.keys():
-            tec_map = tec_maps[self.time]
-            vtec = []
-
-            for lat in tec_map:
-                lons = tec_map[lat]
-                for i in range(len(lons)):
-                    vtec.append(lons[i])  # create vtec list
-
-            lon_solution = 360 / 5.0
-
-            lat_solution = 87.5 * 2/2.5
-
-            lon = np.linspace(-180.0,180.0,int(lon_solution + 1))
-            lat = np.linspace(87.5,-87.5,int(lat_solution + 1))
-            long, latt = np.meshgrid(lon, lat)
-
-            col = len(long[0])
-            v = []
-            one_row = []
-            count = 0
-
-            for ele in vtec:
-                count += 1
-                one_row.append(ele)
-                if count == col:
-                    v.append(one_row)
-                    one_row = []
-                    count = 0
-
-            #interpolation:
-            kind_list = ['linear','quintic','cubic']
-
-            f = interpolate.interp2d(long,latt,v,kind = kind_list[1])
-            lon_new_sol = int(360 / 2.5)
-
-            lat_new_sol = int(87.5 * 2 / 1.5)
-
-            lon_new = np.linspace(-180.0,180.0,lon_new_sol+1)
-            lat_new = np.linspace(87.5,-87.5,lat_new_sol+1)
-
-
-            v_insert = f(lon_new,lat_new)
-            vnew = []
-            row_one = []
-            for i in range(len(v_insert)):
-                row = v_insert[i]
-                for k in range(len(row)):
-                    element = row[k]
-                    if element < 0:
-                        element = 0
-                    row_one.append(element)
-                vnew.append(row_one)
-                row_one = []
-            #lon_new, lat_new = np.meshgrid(lon_new, lat_new)
-
-            return lon_new,lat_new, vnew
-
-##----------------------------------------------------------------------------------------------------------
-    def look_up_inter_vtec(self):
-
-        lon,lat,vtec = self.interpolate_vtec()
-        lon_error_store = []
-        lat_error_store = []
-        for i in range(len(lon)):
-            lon_error = abs(lon[i] - self.lon)
-            lon_error_store.append(lon_error)
-        for k in range(len(lat)):
-            lat_error = abs(lat[k] - self.lat)
-            lat_error_store.append(lat_error)
-        lon_index = lon_error_store.index(min(lon_error_store))
-        lat_index = lat_error_store.index(min(lat_error_store))
-        inter_vtec = vtec[lon_index][lat_index]
-        return (inter_vtec)
-
-
-##----------------------------------------------------------------------------------------------------------
-
-    def look_up_map(self,obs_time):
-        ''' obs_time: type(datetime.datetime(2017,03,16,0,0,0)   a specific time
-            return : TEC_value
-        '''
-        tec_maps = self.get_tec_maps()
-        if obs_time in tec_maps.keys():
-            fixed_time_map = tec_maps.get(obs_time)
-            if self.lat in fixed_time_map:
-                tec_along_lon = fixed_time_map[self.lat]
-                lon_to_index = int((self.lon+180) / 5)
-                if lon_to_index <= len(tec_along_lon):
-                    point_tec = tec_along_lon[lon_to_index]
-                    return point_tec
-                else:
-                    return None
-            else:
-                return None
-        else:
-            return None
 
 ##----------------------------------------------------------------------------------------------------------
 
@@ -617,6 +444,108 @@ class ObsFile(object):
         print(filename)
         plt.savefig(filename)
         plt.show()
+
+
+##---------------------------May be not necessary in our TianGong Processing--------------------------------
+def inter_latlon_vtec(self):
+    '''
+
+    :return:
+    '''
+    tec_maps = self.get_tec_maps()
+    latt = []
+    long = []
+    vtec = []
+
+    if self.time in tec_maps.keys():
+        tec_map = tec_maps[self.time]
+
+        for lat in tec_map:
+            latt.append(lat)
+            lons = tec_map[lat]
+            for i in range(len(lons)):
+                vtec.append(lons[i])  # create lattitude axies & vtec list
+
+        for i in range(-180, 185, 5):
+            long.append(i)  # create longitude axies
+
+        fig = plt.figure(figsize=(9, 6))
+        # ax = plt.subplot(1,1,1,projection = '3d')
+        ax = Axes3D(fig)
+        x, y = np.meshgrid(long, latt)
+        col = len(x[0])
+        row = len(x)
+        count = 0
+        one_row = []
+        v = []
+        for ele in vtec:
+            count += 1
+            one_row.append(ele)
+            if count == col:
+                v.append(one_row)
+                count = 0
+                one_row = []
+        surf = ax.plot_surface(x, y, v, cmap=cm.coolwarm, linewidth=0.5, antialiased=True)
+        ax.set_xlabel('lon')
+        ax.set_ylabel('lat')
+        ax.set_zlabel('vtec')
+        plt.colorbar(surf, shrink=0.5, aspect=5)  # 标注
+        plt.show()
+
+        # 二维插值
+        newfunc = interpolate.interp2d(x, y, v, kind='linear')
+        solution = 180 / 1.5
+        latt_new = np.linspace(87.5, -87.5, solution)
+
+        lon_new = np.linspace(-180.0, 180.0, solution)
+        v_insert = newfunc(lon_new, latt_new)
+        vnew = []
+        row_one = []
+        for i in range(len(v_insert)):
+            row = v_insert[i]
+            for k in range(len(row)):
+                element = row[k]
+                if element < 0:
+                    element = 0
+                row_one.append(element)
+            vnew.append(row_one)
+            row_one = []
+
+        xnew, ynew = np.meshgrid(lon_new, latt_new)
+        fig = plt.figure(figsize=(9, 6))
+        ax2 = Axes3D(fig)
+        surf2 = ax2.plot_surface(xnew, ynew, vnew, rstride=2, cstride=2, cmap=cm.coolwarm, linewidth=0.5,
+                                 antialiased=True)
+        ax2.set_xlabel('lon')
+        ax2.set_ylabel('lat')
+        ax2.set_zlabel('vtec')
+        plt.colorbar(surf2, shrink=0.5, aspect=5)  # 标注
+
+        plt.show()
+
+##----------------------------------------------------------------------------------------------------------
+
+        def look_up_map(self, obs_time):
+            ''' obs_time: type(datetime.datetime(2017,03,16,0,0,0)   a specific time
+                return : TEC_value
+            '''
+            tec_maps = self.get_tec_maps()
+            if obs_time in tec_maps.keys():
+                fixed_time_map = tec_maps.get(obs_time)
+                if self.lat in fixed_time_map:
+                    tec_along_lon = fixed_time_map[self.lat]
+                    lon_to_index = int((self.lon + 180) / 5)
+                    if lon_to_index <= len(tec_along_lon):
+                        point_tec = tec_along_lon[lon_to_index]
+                        return point_tec
+                    else:
+                        return None
+                else:
+                    return None
+            else:
+                return None
+
+
 ####----------------------------------------end class-------------------------------------------------------
 
 
@@ -645,9 +574,10 @@ if __name__ == '__main__':
     inc_far = 41
     lat  = 37.76
     lon  = -25.47
-    obj = ObsFile(date,time,f,inc_far,lat,lon)
+    obj = IonoFile(date,time,f,inc_far,lat,lon)
     ipd = obj.processing_IPD_2()
     print (ipd)
+    #print(obj.inter_latlon_vtec())
 
 
 
